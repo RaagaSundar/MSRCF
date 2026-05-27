@@ -1,165 +1,123 @@
-# MSRCF — Manufacture-to-Service Risk Continuity Framework
+# MSRCF
 
-A research-grade Python implementation of the **MSRCF** for aerospace
-CFRP (carbon fiber reinforced polymer) structural panels. MSRCF is the
-first framework, to the authors' knowledge, that unifies upstream
-**manufacturing-complexity risk scoring** with downstream **in-service
-damage-mode prediction** under a single time-evolving metric, the
-**Risk Continuity Score (RCS)**.
+A Python project for tracking aerospace composite panels from manufacture through their service life using a single risk number.
 
-This v0.2 release extends the original three-pillar architecture with:
+The idea is simple. Factory engineers use one set of models to flag risky parts at build time. Maintenance engineers use a different set to track damage once the part is flying. Nobody connects them. This project does. It computes a Risk Continuity Score (RCS) for every component that starts at "as-built" and updates each inspection cycle, so there's always one number telling you how worried to be about each part.
 
-- **Per-damage-mode RCS_k(t) decomposition** — see *why* a component is RED.
-- **Monte Carlo uncertainty bands** on every RCS trajectory.
-- **Remaining Useful Life (RUL)** forecasting out to user-configurable horizons.
-- **GridSearchCV hyperparameter tuning** for the best baseline classifier (opt-in).
-- **SHAP feature attribution + per-class ROC/calibration** for the production classifier.
-- **Sobol' global sensitivity analysis** on the Φ_composite weight vector.
-- **IsolationForest anomaly detection** for out-of-distribution components.
-- **18-test pytest suite** that pins the core invariants of every pillar.
-- A clean **CLI** so seed / sample size / tuning / MC count can be set per-run.
+## What it does
 
----
+Three layers, in order:
 
-## Architecture at a glance
+1. Scores each component's manufacturing complexity (ply count, void probability, fastener density, zone complexity, thickness variation) on a 1-5 risk matrix.
+2. Trains five classifiers (SVM, Random Forest, Logistic Regression, KNN, XGBoost) to predict what damage mode each component is likely to develop.
+3. Combines those two signals with an in-service degradation curve to produce the RCS over time, and flags every component as GREEN, YELLOW, or RED.
+
+On top of that you also get:
+
+- Per-damage-mode RCS so you know *what* to inspect for, not just *whether*.
+- Monte Carlo uncertainty bands around each trajectory.
+- Remaining Useful Life forecasts (cycles-to-YELLOW, cycles-to-RED).
+- SHAP feature importance and ROC / calibration plots for the classifier.
+- Sobol sensitivity on the Phi weight vector.
+- Isolation Forest anomaly flagging for components that look strange.
+
+## Setup
+
+Python 3.10 or newer. Install dependencies:
 
 ```
-                 +-----------------------------+
- Manufacturing   |  Pillar 1: Phi_composite    |
-   complexity ----> generalized risk matrix    |---+
-   features      |  (risk_matrix.py)           |   |
-                 +--------------+--------------+   |
-                                |                  |
-                                v                  |
-                 +-----------------------------+   |  Sobol sensitivity
-                 |  Pillar 2: Damage classifier|   |  (sensitivity.py)
-                 |  SVM / RF / LR / KNN / XGB  |   |
-                 |  + opt-in GridSearchCV      |---+
-                 |  (damage_predictor.py)      |   |  SHAP + ROC + calib.
-                 +--------------+--------------+   |  (explainability.py)
-                                |                  |
-                                v                  |
-                 +-----------------------------+   |  IsolationForest
-                 |  Pillar 3: Risk Continuity  |---+  (anomaly_detector.py)
-                 |  Score (RCS) over cycles    |
-                 |  + per-class RCS_k(t)       |
-                 |  + Monte Carlo CI band      |
-                 |  (rcs_engine.py)            |
-                 +--------------+--------------+
-                                |
-                                v
-                 +-----------------------------+
-                 |  RUL forecast cycles_to_RED |
-                 |  (rul_predictor.py)         |
-                 +--------------+--------------+
-                                |
-                                v
-                       Dashboard + figures
-                       (dashboard.py)
+pip install -r requirements.txt
 ```
+
+## Run it
+
+From the project root:
+
+```
+python src/main.py
+```
+
+That generates the dataset, trains the models, builds the RCS, and writes all figures and CSVs. Takes about a minute on a laptop.
+
+If you want to tune the best classifier:
+
+```
+python src/main.py --tune-best
+```
+
+Other useful flags:
+
+- `--n-components 1000` -- bigger fleet
+- `--seed 7` -- different RNG seed
+- `--mc-samples 500` -- tighter Monte Carlo bands
+- `--skip-shap` -- skip SHAP (saves about 5 seconds)
+- `--skip-sobol` -- skip Sobol sensitivity
+
+## Run the tests
+
+```
+python -m pytest tests/
+```
+
+18 tests, takes about 5 seconds.
+
+## What you get out
+
+After a run you'll have:
+
+`data/`
+
+- `msrcf_synthetic_dataset.csv` -- raw 500-component dataset
+- `msrcf_scored_dataset.csv` -- with Phi_composite scores added
+- `msrcf_rcs_trajectories.csv` -- long-format RCS over 11 cycles
+- `msrcf_rul_forecast.csv` -- cycles-to-yellow and cycles-to-red per component
+- `msrcf_anomaly_flags.csv` -- anomaly scores
+
+`results/`
+
+- `confusion_matrices.png` -- one per classifier
+- `model_comparison.png` -- accuracy / precision / recall / F1 bar chart
+- `rcs_trajectories.png` -- 5 sample components over time
+- `rcs_trajectories_mc.png` -- same, with uncertainty bands
+- `rcs_per_class.png` -- RCS broken out by damage mode
+- `rul_histogram.png` -- cycles-to-yellow and cycles-to-red distributions
+- `risk_dashboard.png` -- fleet-level summary (4 panels)
+- `anomaly_scatter.png` -- anomaly scores vs Phi
+- `feature_attribution.png` -- SHAP heatmap
+- `roc_calibration.png` -- ROC and reliability curves
+- `sobol_sensitivity.png` -- Phi weight sensitivity
+- plus CSV versions of the metrics
 
 ## Project layout
 
 ```
-MSRCF/
-├── src/
-│   ├── config.py             # single source of truth for hyperparameters
-│   ├── data_generator.py     # synthetic CFRP dataset (500 components)
-│   ├── risk_matrix.py        # Pillar 1: Phi_composite scorer
-│   ├── damage_predictor.py   # Pillar 2: 5-classifier benchmark + GridSearchCV
-│   ├── rcs_engine.py         # Pillar 3: time-evolving RCS + per-class + MC band
-│   ├── rul_predictor.py      # Remaining Useful Life extrapolator
-│   ├── anomaly_detector.py   # IsolationForest OOD detector
-│   ├── explainability.py     # SHAP + ROC + calibration
-│   ├── sensitivity.py        # Sobol' weight sensitivity
-│   ├── dashboard.py          # matplotlib visualisation layer
-│   └── main.py               # end-to-end CLI orchestrator
-├── tests/                    # pytest suite (18 tests, ~5 s)
-├── data/                     # CSV outputs (regenerated on every run)
-├── results/                  # PNG + CSV outputs (regenerated on every run)
-├── report/
-│   └── MSRCF_Technical_Report.md
-├── requirements.txt
-└── README.md
+src/        source modules
+tests/      pytest suite
+data/       inputs and outputs (regenerated each run)
+results/    figures (regenerated each run)
+report/     technical report (markdown)
 ```
 
-## Setup
+Source files:
 
-Python 3.10+ recommended. Install the required dependencies:
+- `config.py` -- all hyperparameters in one place
+- `data_generator.py` -- synthetic dataset
+- `risk_matrix.py` -- Pillar 1 (Phi_composite scorer)
+- `damage_predictor.py` -- Pillar 2 (the five classifiers)
+- `rcs_engine.py` -- Pillar 3 (RCS, per-class, Monte Carlo)
+- `rul_predictor.py` -- Remaining Useful Life
+- `anomaly_detector.py` -- Isolation Forest
+- `explainability.py` -- SHAP, ROC, calibration
+- `sensitivity.py` -- Sobol sensitivity
+- `dashboard.py` -- plots
+- `main.py` -- runs everything in order
 
-```bash
-python -m pip install -r requirements.txt
-```
+## A few things to know
 
-## Running the pipeline
+- The dataset is synthetic. The distributions and rules are anchored in published composites literature, but using this on a real fleet would mean back-testing against actual inspection records first.
+- All seeds default to 42, so runs are reproducible. Pass `--seed` to change.
+- No web frameworks. Just matplotlib for plotting and pytest for testing.
 
-From the project root:
+## Read more
 
-```bash
-python src/main.py                           # baseline run, 500 components
-python src/main.py --tune-best                # add a GridSearchCV refinement
-python src/main.py --n-components 1000        # bigger fleet
-python src/main.py --skip-shap --skip-sobol   # faster smoke test
-python src/main.py --mc-samples 500           # tighter MC bands
-```
-
-CLI reference:
-
-| Flag                | Default | What it does                                            |
-|---------------------|---------|---------------------------------------------------------|
-| `--n-components N`  | 500     | Fleet size to synthesise.                               |
-| `--seed S`          | 42      | RNG seed for full reproducibility.                       |
-| `--tune-best`       | off     | GridSearchCV on the winning baseline model.             |
-| `--mc-samples M`    | 200     | MC replicates for the RCS uncertainty band.             |
-| `--skip-shap`       | off     | Skip SHAP feature attribution (saves ~5 s).             |
-| `--skip-sobol`      | off     | Skip Sobol' weight sensitivity (saves ~3 s).            |
-
-## Running the tests
-
-```bash
-python -m pytest tests/ -v
-```
-
-18 tests cover dataset physics, risk-matrix invariants, the Bayesian
-update + RCS shapes, the MC band monotonicity, RUL ordering, and the
-anomaly-detector contamination rate.
-
-## Outputs
-
-After a successful baseline run you should see:
-
-```
-data/
-  msrcf_synthetic_dataset.csv     # raw features + ground truth labels
-  msrcf_scored_dataset.csv        # adds per-feature bin scores + Phi
-  msrcf_rcs_trajectories.csv      # long-format RCS (with MC band, per-class)
-  msrcf_rul_forecast.csv          # cycles-to-yellow / cycles-to-red per component
-  msrcf_anomaly_flags.csv         # IsolationForest output
-results/
-  confusion_matrices.png          # one per model
-  model_comparison.png + .csv     # classifier metrics
-  rcs_trajectories.png            # 5 representative components
-  rcs_trajectories_mc.png         # same + Monte Carlo 5-95 % band
-  rcs_per_class.png               # per-damage-mode RCS_k(t) panels
-  rul_histogram.png               # cycles-to-yellow + cycles-to-red distributions
-  risk_dashboard.png              # fleet-level summary dashboard
-  anomaly_scatter.png             # anomaly score vs Phi
-  feature_attribution.png + .csv  # SHAP heatmap (or permutation fallback)
-  roc_calibration.png + .csv      # one-vs-rest ROC + reliability curves
-  sobol_sensitivity.png + sobol_indices.csv
-```
-
-## Reading the technical report
-
-The methodology, results, and discussion are written up in academic
-style in [`report/MSRCF_Technical_Report.md`](report/MSRCF_Technical_Report.md).
-
-## Notes
-
-- Dependencies are intentionally limited to widely-available scientific
-  Python libraries; no web framework is required.
-- The dataset is fully synthetic and uses a documented physics-informed
-  ground-truth function. The repository contains no proprietary
-  aerospace data.
-- All random seeds default to 42 for full reproducibility; pass
-  `--seed` to vary.
+Full methodology and results are in `report/MSRCF_Technical_Report.md`.
