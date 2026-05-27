@@ -653,4 +653,4 @@ References
 
 9. Talreja, R., & Singh, C. V. (2012). *Damage and Failure of
    Composite Materials.* Cambridge University Press.
-
+   
