@@ -1,0 +1,31 @@
+# --- Pipeline-regenerated artifacts ----------------------------------------
+# Both directories are documented in README.md as "regenerated on every run".
+# main.py and every writer call os.makedirs(..., exist_ok=True), so a fresh
+# clone reconstructs them on first run.
+data/
+results/
+
+# --- Python bytecode + caches ----------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# --- Virtual environments --------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+
+# --- Editor / OS noise -----------------------------------------------------
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
