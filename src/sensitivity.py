@@ -21,7 +21,6 @@ small, the score is robust (good).
 from __future__ import annotations
 
 import os
-from typing import Iterable
 
 import matplotlib
 
@@ -97,9 +96,7 @@ def sobol_phi_weight_sensitivity(
     # Vectorised fleet-mean Phi for each parameter draw.
     fleet_phi = 5.0 * (samples_norm @ score_matrix.T).mean(axis=1)
 
-    Si = sobol_analyze.analyze(
-        problem, fleet_phi, calc_second_order=False, print_to_console=False
-    )
+    Si = sobol_analyze.analyze(problem, fleet_phi, calc_second_order=False, print_to_console=False)
     indices_df = pd.DataFrame(
         {
             "weight": problem["names"],
@@ -137,9 +134,7 @@ def sobol_phi_weight_sensitivity(
     ax.set_xticks(x)
     ax.set_xticklabels(indices_df["weight"], rotation=15)
     ax.set_ylabel("Sobol index")
-    ax.set_title(
-        f"Phi_composite weight sensitivity (Sobol', +/- {int(weight_scale * 100)} %)"
-    )
+    ax.set_title(f"Phi_composite weight sensitivity (Sobol', +/- {int(weight_scale * 100)} %)")
     ax.legend()
     fig.tight_layout()
     fig.savefig(output_path, bbox_inches="tight")

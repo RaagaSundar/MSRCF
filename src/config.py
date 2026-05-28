@@ -10,8 +10,7 @@ they can be audited in one place and overridden from the CLI.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-
+from dataclasses import dataclass
 
 # ---------------------------------------------------------------------------
 # Global reproducibility
@@ -99,7 +98,7 @@ MC_SAMPLES = 200
 # probability and +/- 5 points around a 95 % probability - a credible
 # upper bound on per-inspection classifier disagreement.
 MC_NOISE_SIGMA = 1.2
-MC_CI_LOW = 5.0         # percentile bounds for the trajectory ribbon
+MC_CI_LOW = 5.0  # percentile bounds for the trajectory ribbon
 MC_CI_HIGH = 95.0
 
 
@@ -132,6 +131,6 @@ class RunConfig:
     mc_samples: int = MC_SAMPLES
     skip_shap: bool = False
     skip_sobol: bool = False
-    output_dir: str = ""        # populated by main.py from project root
+    output_dir: str = ""  # populated by main.py from project root
     data_dir: str = ""
     report_dir: str = ""

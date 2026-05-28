@@ -21,7 +21,7 @@ can summarise outputs to stdout.
 from __future__ import annotations
 
 import os
-from typing import Iterable
+from collections.abc import Iterable
 
 import matplotlib
 
@@ -31,10 +31,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.container import BarContainer
 
 from damage_predictor import DAMAGE_CLASS_NAMES, ModelResult
 from rcs_engine import RCSTrajectory
-
 
 sns.set_theme(style="whitegrid", context="notebook")
 plt.rcParams["figure.dpi"] = 110
@@ -43,9 +43,7 @@ plt.rcParams["figure.dpi"] = 110
 # ---------------------------------------------------------------------------
 # 1. Confusion matrices
 # ---------------------------------------------------------------------------
-def plot_confusion_matrices(
-    results: dict[str, ModelResult], output_path: str
-) -> str:
+def plot_confusion_matrices(results: dict[str, ModelResult], output_path: str) -> str:
     """
     Produce a single figure of confusion matrices, one subplot per model.
 
@@ -61,7 +59,9 @@ def plot_confusion_matrices(
     class_labels = next(iter(results.values())).class_labels
     tick_labels = [f"{c}\n{DAMAGE_CLASS_NAMES.get(c, str(c))}" for c in class_labels]
 
-    for ax, name in zip(axes, names):
+    # axes (2x3 grid) is intentionally longer than names (5 models); the
+    # spare panel is switched off below, so strict=False is correct here.
+    for ax, name in zip(axes, names, strict=False):
         r = results[name]
         sns.heatmap(
             r.confusion,
@@ -80,7 +80,7 @@ def plot_confusion_matrices(
         ax.tick_params(axis="y", labelrotation=0, labelsize=8)
 
     # Hide unused subplot slot(s).
-    for ax in axes[len(names):]:
+    for ax in axes[len(names) :]:
         ax.axis("off")
 
     fig.suptitle("Damage-mode classifier confusion matrices", fontsize=14)
@@ -93,9 +93,7 @@ def plot_confusion_matrices(
 # ---------------------------------------------------------------------------
 # 2. Model comparison bar chart
 # ---------------------------------------------------------------------------
-def plot_model_comparison(
-    results: dict[str, ModelResult], output_path: str
-) -> str:
+def plot_model_comparison(results: dict[str, ModelResult], output_path: str) -> str:
     """
     Grouped bar chart comparing accuracy / macro-precision / macro-recall
     / macro-F1 across the five models.
@@ -114,16 +112,15 @@ def plot_model_comparison(
     long_df = pd.DataFrame(rows)
 
     fig, ax = plt.subplots(figsize=(11, 6))
-    sns.barplot(
-        data=long_df, x="model", y="value", hue="metric", ax=ax, palette="viridis"
-    )
+    sns.barplot(data=long_df, x="model", y="value", hue="metric", ax=ax, palette="viridis")
     ax.set_ylim(0, 1.05)
     ax.set_title("Classifier performance comparison (test set, macro-averaged)")
     ax.set_ylabel("Score")
     ax.set_xlabel("")
     ax.legend(title="", loc="upper right", ncols=4)
     for container in ax.containers:
-        ax.bar_label(container, fmt="%.2f", fontsize=7, padding=2)
+        if isinstance(container, BarContainer):
+            ax.bar_label(container, fmt="%.2f", fontsize=7, padding=2)
     fig.tight_layout()
     fig.savefig(output_path, bbox_inches="tight")
     plt.close(fig)
@@ -159,7 +156,7 @@ def plot_rcs_trajectories(
     ax_top.axhspan(70, 100, color="#ff8a80", alpha=0.18, label="RED zone")
     ax_top.axhspan(40, 70, color="#ffe082", alpha=0.25, label="YELLOW zone")
     ax_top.axhspan(0, 40, color="#a5d6a7", alpha=0.20, label="GREEN zone")
-    for color, cid in zip(palette, sample_ids):
+    for color, cid in zip(palette, sample_ids, strict=True):
         sub = df[df["component_id"] == cid].sort_values("cycle")
         ax_top.plot(
             sub["cycle"],
@@ -176,7 +173,7 @@ def plot_rcs_trajectories(
     ax_top.legend(loc="upper left", ncols=2, fontsize=8)
 
     # Bottom: P_damage and degradation factor for the same set.
-    for color, cid in zip(palette, sample_ids):
+    for color, cid in zip(palette, sample_ids, strict=True):
         sub = df[df["component_id"] == cid].sort_values("cycle")
         ax_bot.plot(
             sub["cycle"],
@@ -239,7 +236,7 @@ def _select_diverse_sample(trajectory: RCSTrajectory, k: int = 5) -> list[str]:
         ("RED", 80.0),
     ]
     for flag_name, tgt in band_targets:
-        mask = (final_flag == flag_name)
+        mask = final_flag == flag_name
         if mask.sum() == 0:
             continue
         candidate_indices = np.where(mask)[0]
@@ -251,22 +248,22 @@ def _select_diverse_sample(trajectory: RCSTrajectory, k: int = 5) -> list[str]:
                 break
 
     # Top up with two more components at the extremes for visual range.
-    extras = [
+    extras: list[int | None] = [
         _pick_closest_to(float(np.quantile(final, 0.05)), set(chosen)),
         _pick_closest_to(float(np.quantile(final, 0.95)), set(chosen)),
     ]
-    for idx in extras:
-        if idx is not None and idx not in chosen:
-            chosen.append(idx)
+    for cand in extras:
+        if cand is not None and cand not in chosen:
+            chosen.append(cand)
 
     # If we still have fewer than k (because a flag band was empty),
     # fill from evenly-spaced quantiles.
     while len(chosen) < k:
         q = (len(chosen) + 1) / (k + 1)
-        idx = _pick_closest_to(float(np.quantile(final, q)), set(chosen))
-        if idx is None:
+        cand = _pick_closest_to(float(np.quantile(final, q)), set(chosen))
+        if cand is None:
             break
-        chosen.append(idx)
+        chosen.append(cand)
 
     return [trajectory.component_ids[i] for i in chosen[:k]]
 
@@ -316,9 +313,7 @@ def plot_risk_dashboard(
     ax_phi.set_xlabel("Phi_composite")
 
     # (2) Damage mode distribution (ground truth)
-    dmg_counts = (
-        panel_df["damage_mode"].value_counts().sort_index().rename("count").reset_index()
-    )
+    dmg_counts = panel_df["damage_mode"].value_counts().sort_index().rename("count").reset_index()
     dmg_counts["label"] = dmg_counts["damage_mode"].map(DAMAGE_CLASS_NAMES)
     sns.barplot(
         data=dmg_counts,
@@ -346,9 +341,7 @@ def plot_risk_dashboard(
 
     # (4) Flag breakdown by risk tier
     pivot = (
-        panel_df.groupby(["risk_tier", "final_flag"], observed=False)
-        .size()
-        .unstack(fill_value=0)
+        panel_df.groupby(["risk_tier", "final_flag"], observed=False).size().unstack(fill_value=0)
     )
     pivot = pivot.reindex(tier_order)
     # Make sure all three flags are present even if a column is empty.
@@ -390,9 +383,7 @@ def plot_rcs_trajectories_with_uncertainty(
     `trajectory.rcs_lower` and `trajectory.rcs_upper` are populated.
     """
     if trajectory.rcs_lower is None or trajectory.rcs_upper is None:
-        raise ValueError(
-            "trajectory has no MC band; populate rcs_lower/rcs_upper first"
-        )
+        raise ValueError("trajectory has no MC band; populate rcs_lower/rcs_upper first")
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     if sample_ids is None:
@@ -407,7 +398,7 @@ def plot_rcs_trajectories_with_uncertainty(
     palette = sns.color_palette("husl", n_colors=len(sample_ids))
     id_to_idx = {cid: i for i, cid in enumerate(trajectory.component_ids)}
     cycles = trajectory.cycles
-    for color, cid in zip(palette, sample_ids):
+    for color, cid in zip(palette, sample_ids, strict=True):
         i = id_to_idx[cid]
         med = trajectory.rcs_normalised[:, i]
         lo = trajectory.rcs_lower[:, i]
@@ -449,21 +440,22 @@ def plot_rcs_per_class(
     id_to_idx = {cid: i for i, cid in enumerate(trajectory.component_ids)}
 
     n_panels = len(sample_ids)
-    fig, axes = plt.subplots(
-        2, 2, figsize=(13, 9), sharex=True, sharey=True
-    )
+    fig, axes = plt.subplots(2, 2, figsize=(13, 9), sharex=True, sharey=True)
     axes = axes.flatten()
     cycles = trajectory.cycles
     palette = sns.color_palette("Set1", n_colors=len(trajectory.damage_class_labels))
 
-    for ax, cid in zip(axes, sample_ids):
+    # axes is a fixed 2x2 grid; sample_ids may be shorter, so strict=False.
+    for ax, cid in zip(axes, sample_ids, strict=False):
         i = id_to_idx[cid]
         ax.axhspan(70, 100, color="#ff8a80", alpha=0.10)
         ax.axhspan(40, 70, color="#ffe082", alpha=0.15)
         ax.axhspan(0, 40, color="#a5d6a7", alpha=0.10)
         for color, j, cls in zip(
-            palette, range(len(trajectory.damage_class_labels)),
+            palette,
+            range(len(trajectory.damage_class_labels)),
             trajectory.damage_class_labels,
+            strict=True,
         ):
             ax.plot(
                 cycles,
@@ -563,9 +555,7 @@ def plot_anomaly_scatter(
     merged = anomaly_df.copy()
     if final_rcs is not None:
         merged = merged.merge(
-            final_rcs.rename("final_rcs").reset_index().rename(
-                columns={"index": "component_id"}
-            ),
+            final_rcs.rename("final_rcs").reset_index().rename(columns={"index": "component_id"}),
             on="component_id",
             how="left",
         )

@@ -352,6 +352,46 @@ shows residual errors concentrated on the **Fatigue crack** class
 multiple other rules in feature space. This is the expected behaviour
 in real fleets where fatigue is the most ambiguous inspection finding.
 
+3.2.1 Multi-seed comparison and significance testing
+
+A single train/test split is a poor basis for ranking models. We
+therefore re-ran the entire benchmark over **15 independent seeds**
+(seeds 42-56; each seed re-generates the dataset, re-splits, and
+re-seeds the models) and report macro-F1 as mean ± 95 % Student-t
+confidence interval, with a Friedman omnibus test and Nemenyi post-hoc
+(Appendix B). This is the protocol of Demšar (2006).
+
+| Model | Macro-F1 (mean ± 95% CI) | Accuracy (mean ± 95% CI) | Avg rank |
+|-------|--------------------------|---------------------------|---------:|
+| XGBoost | 0.791 ± 0.030 | 0.916 ± 0.012 | 1.47 |
+| Random Forest | 0.774 ± 0.025 | 0.913 ± 0.009 | 1.60 |
+| SVM (RBF) | 0.651 ± 0.032 | 0.838 ± 0.019 | 3.20 |
+| KNN (k=5) | 0.567 ± 0.035 | 0.799 ± 0.017 | 4.33 |
+| Logistic Regression | 0.566 ± 0.034 | 0.787 ± 0.019 | 4.40 |
+
+The Friedman test strongly rejects the null that all five models are
+equivalent (χ²(4) = 48.5, **p = 7.3 × 10⁻¹⁰**). With k = 5 models and
+G = 15 seeds the Nemenyi critical difference at α = 0.05 is **CD =
+1.575** average-rank units. The pairwise outcome is the scientifically
+important part, and it qualifies the naive single-seed story of §3.2:
+
+- **XGBoost vs Random Forest: rank gap = 0.13 < CD.** The two tree
+  ensembles are **statistically indistinguishable** over the seed
+  ensemble, even though on the single seed-42 split XGBoost (0.82)
+  appeared to clearly beat Random Forest (0.74). Reporting only the
+  single split would have overstated XGBoost's superiority.
+- **Both ensembles significantly beat SVM, KNN, and Logistic
+  Regression** (every ensemble-vs-non-ensemble rank gap, 1.60-2.93,
+  exceeds the CD).
+
+The honest conclusion is therefore "a gradient-boosted or bagged tree
+ensemble is required; the choice between the two is within noise on
+this dataset." XGBoost is retained as the production model on a
+tie-break (marginally better mean rank and native probability output),
+not on a claim of significant superiority over Random Forest. The
+critical-difference diagram (`results/critical_difference.png`) and the
+forest plot (`results/multiseed_forest.png`) visualise this.
+
 3.3 Calibration + per-class AUC
 
 One-vs-rest ROC and reliability analysis (see
@@ -396,6 +436,29 @@ told them*:
 
 This consistency between rule-derived ground truth and post-hoc SHAP
 attribution is a strong sanity check on the entire Pillar 2 pipeline.
+
+3.4.1 Ablation: does every feature earn its place?
+
+SHAP tells us which features the model *uses*; an ablation tells us
+which features the model *needs*. We removed each feature in turn,
+retrained XGBoost, and measured the resulting drop in macro-F1, averaged
+over 8 seeds (mean ± 95 % CI):
+
+| Removed feature | Macro-F1 without it | Drop vs full model |
+|-----------------|--------------------:|-------------------:|
+| ply_count | 0.547 ± 0.072 | **0.253 ± 0.050** |
+| zone_complexity | 0.597 ± 0.048 | 0.203 ± 0.056 |
+| void_probability | 0.626 ± 0.027 | 0.174 ± 0.049 |
+| thickness_variation | 0.628 ± 0.054 | 0.172 ± 0.058 |
+| fastener_density | 0.683 ± 0.056 | 0.117 ± 0.047 |
+
+Every feature's drop has a 95 % CI that excludes zero, so **no feature
+is redundant** — even the least important, fastener density, costs
+0.117 macro-F1 when removed. The ranking (ply_count and zone_complexity
+most critical) is consistent with the SHAP attribution and with the
+conjunctive ground-truth rules, in which ply_count participates in two
+of the four damage-mode rules. The corresponding design-choice ablation
+for Pillar 3 is reported in §3.6.1; full tables are in Appendix C.
 
 3.5 Sobol' weight sensitivity
 
@@ -460,6 +523,31 @@ flags, which is the operationally important observation: a single
 component-time risk number (Φ_composite, or P_damage, or
 degradation) is insufficient on its own, but their continuous fusion
 under RCS is discriminative.
+
+3.6.1 Ablation of the RCS design choices
+
+§2.4.1 argued that blending the classifier prior with a Φ-derived prior
+is what keeps the YELLOW "monitor" band from collapsing on an
+over-confident classifier. We test that claim directly by toggling the
+two non-obvious design decisions and measuring the final-cycle flag
+distribution over 8 seeds (mean ± 95 % CI):
+
+| Configuration | GREEN | YELLOW | RED |
+|---------------|------:|-------:|----:|
+| **full** (blend = 0.55, drift on) | 271 ± 28 | **64 ± 28** | 165 ± 8 |
+| no Φ prior (blend = 1.0) | 328 ± 11 | 8 ± 9 | 164 ± 8 |
+| no drift (blend = 0.55) | 334 ± 8 | 5 ± 5 | 162 ± 8 |
+| minimal (blend = 1.0, no drift) | 335 ± 8 | 3 ± 2 | 162 ± 8 |
+
+The result is unambiguous: removing the Φ-blended prior collapses the
+YELLOW band from ~64 components to ~8 — an **8× reduction** in the
+"monitor closely" population — while the RED count is essentially
+unchanged (~162-165 across all four configurations). In other words,
+the clearly-damaged fleet is robustly flagged no matter what, but the
+*operationally interesting middle* — components worth watching but not
+yet worth grounding — only exists because of the Φ prior. This is the
+quantitative justification for a design choice that would otherwise look
+like an arbitrary hyperparameter. Full tables in Appendix C.
 
 3.7 Per-damage-mode decomposition
 
@@ -653,5 +741,202 @@ References
 
 9. Talreja, R., & Singh, C. V. (2012). *Damage and Failure of
    Composite Materials.* Cambridge University Press.
+
+---
+
+Appendix A. Mathematical formulation
+
+This appendix gives the formal definitions, bounds, and convergence
+properties behind the three pillars. All quantities are stated for a
+single component unless a fleet aggregate is indicated.
+
+A.1 Notation
+
+| Symbol | Meaning |
+|--------|---------|
+| N_p, V_p, F_d, Z_c, T_v | the five manufacturing-complexity features |
+| s_i ∈ {1,…,5} | percentile bin score of feature i |
+| w_i | fixed weight of feature i, with Σ w_i = 1 |
+| Φ | composite manufacturing risk score (Φ_composite) |
+| D(t) | service-degradation factor at cycle t |
+| P(t) | posterior damage probability at cycle t |
+| c | classifier damage signal 1 − P(class 0), constant in t |
+| λ | degradation rate (0.15) |
+| α, β, γ | RCS weights (0.4, 0.4, 0.2) |
+| R(t) | normalised Risk Continuity Score at cycle t |
+
+A.2 Φ_composite and its range
+
+> Φ = 5 · Σ_{i=1}^{5} w_i · s_i ,  Σ w_i = 1,  s_i ∈ {1,2,3,4,5}.
+
+Because the weights form a convex combination of the bin scores, Φ is a
+scaled convex combination of integers in [1, 5]:
+
+> min Φ = 5 · (1) = 5   (all s_i = 1),
+> max Φ = 5 · (5) = 25  (all s_i = 5).
+
+Hence Φ ∈ [5, 25] for every component, independent of the weight vector.
+The percentile binning guarantees each s_i is approximately uniform on
+{1,…,5} across the fleet, so Φ is a rank-stable relative risk score.
+
+A.3 Risk Continuity Score and its range
+
+> R_raw(t) = α·Φ + β·100·P(t) + γ·100·D(t),
+> D(t) = 1 − e^{−λ t}.
+
+The theoretical maximum of the un-normalised score is attained at
+Φ = 25, P = 1, D → 1:
+
+> R_raw^max = α·25 + β·100 + γ·100 = 0.4·25 + 0.4·100 + 0.2·100 = 70.
+
+We normalise R(t) = 100 · R_raw(t) / 70, clipped to [0, 100]. Since
+R_raw ≥ α·5 = 2 (when P = D = 0), the score is bounded in
+[100·2/70, 100] = [2.86, 100] before clipping, and the clip only ever
+binds from above in pathological inputs. The flag map is
+
+> R < 40 → GREEN,  40 ≤ R < 70 → YELLOW,  R ≥ 70 → RED.
+
+A.4 The Bayesian update as a log-odds recursion
+
+Let the per-cycle evidence be
+
+> e_t = clip( 0.5 + κ·(c − 0.5) + δ·D(t),  0.05,  0.95 ),
+
+with κ = INFO_WEIGHT = 0.15 and δ = DRIFT = 0.10. The classical
+two-hypothesis update
+
+> P(t) = e_t·P(t−1) / [ e_t·P(t−1) + (1−e_t)·(1−P(t−1)) ]
+
+is *additive in log-odds*. Writing L(t) = logit P(t) = ln[P(t)/(1−P(t))]
+and using logit(e_t) = ln[e_t/(1−e_t)]:
+
+> L(t) = L(t−1) + logit(e_t)  ⟹  L(t) = L(0) + Σ_{s=1}^{t} logit(e_s).
+
+This closed form makes the dynamics transparent:
+
+- **Increment sign.** logit(e_t) > 0 ⟺ e_t > 0.5 ⟺ κ(c−0.5)+δD(t) > 0.
+  A component with a damage-leaning classifier (c > 0.5) accumulates
+  positive increments; a clearly-nominal component (c ≪ 0.5) accumulates
+  negative ones.
+- **Drift term.** Because D(t) is monotone increasing, the evidence
+  always picks up an additive +δ·D(t) push, so even an ambiguous
+  component (c = 0.5) experiences a slow upward log-odds drift — the
+  intended "service makes everything look slightly worse over time".
+- **Finite-horizon behaviour.** The only fixed points of the un-clipped
+  recursion are P ∈ {0, 1} (reached only as t → ∞ when e_∞ ≠ 0.5). Over
+  the simulated horizon T = 10 the increment magnitude |logit(e_t)| is
+  small by design (κ, δ ≪ 1): confident components (|c − 0.5| large)
+  approach a clip boundary within the horizon, while ambiguous
+  components (c ≈ 0.5) remain in the interior and populate the YELLOW
+  band. The ablation in Appendix C confirms this quantitatively.
+- **Clipping.** Clipping e_t to [0.05, 0.95] bounds each increment by
+  |logit(e_t)| ≤ ln(19) ≈ 2.944, and clipping P to [0.01, 0.99]
+  prevents the degenerate locking at exactly {0, 1}.
+
+A.5 Monte Carlo uncertainty estimator
+
+For replicate s = 1..S we perturb the per-class classifier logits by
+ε ~ N(0, σ²) (σ = MC_NOISE_SIGMA = 1.2), recompute the full trajectory,
+and report the empirical 5th/95th percentiles of {R^{(s)}(t)}. The
+sample quantile q̂_p is a consistent, asymptotically-normal estimator
+of the true quantile with standard error
+
+> SE(q̂_p) ≈ sqrt( p(1−p) / S ) / f(q_p),
+
+i.e. the band endpoints converge at the usual Monte Carlo rate
+O(S^{−1/2}). At S = 200 the half-width of the band is ≈ 1–2 RCS points
+for interior (YELLOW) components and sub-point for saturated GREEN/RED
+components.
+
+A.6 Computational complexity
+
+For N components, F = 5 features, K = 5 classes, T = 11 cycles,
+S Monte-Carlo replicates, and the seed-ensemble size G:
+
+| Stage | Cost |
+|-------|------|
+| Data generation | O(N) |
+| Φ scoring (fit + transform) | O(N·F + N log N) (percentiles) |
+| One classifier benchmark (5 models, 5-fold CV) | dominated by XGBoost/RF: O(n_trees · depth · N · F) |
+| RCS trajectory (aggregate + per-class) | O(N · T · K) |
+| Monte Carlo band | O(S · N · T · K) |
+| Multi-seed analysis | O(G ·  benchmark) |
+| Friedman + Nemenyi | O(G · k log k) for k models |
+
+Every stage is linear in N, so the pipeline scales to large fleets; the
+practical cost is dominated by the tree-ensemble training inside the
+multi-seed loop.
+
+---
+
+Appendix B. Statistical evaluation protocol
+
+We compare the five classifiers with the protocol recommended by Demšar
+(2006) for multiple runs.
+
+B.1 Friedman omnibus test
+
+For G seeds (blocks) and k models, let R_j be the sum over seeds of the
+within-seed rank of model j (rank 1 = best macro-F1). The Friedman
+statistic
+
+> χ²_F = [ 12G / (k(k+1)) ] · [ Σ_j R̄_j² − k(k+1)²/4 ],
+
+where R̄_j = R_j / G, is distributed as χ²(k−1) under the null that all
+models are equivalent. Rejection licenses a post-hoc test.
+
+B.2 Nemenyi post-hoc critical difference
+
+Two models differ significantly at level α iff their average ranks
+differ by more than
+
+> CD = q_α · sqrt( k(k+1) / (6G) ),
+
+where q_α is the studentized-range critical value divided by √2
+(tabulated in experiments.py for k = 2..10). The CD diagram in
+`results/critical_difference.png` connects models whose rank gap ≤ CD
+with a horizontal "clique" bar; models in different cliques are
+statistically distinguishable.
+
+The numerical outcome of this protocol on MSRCF is reported in §3.2 and
+the multi-seed summary CSV.
+
+---
+
+Appendix C. Ablation study (full tables)
+
+Both ablations are averaged over 8 seeds (42-49); values are mean ±
+95 % Student-t confidence interval. Reproduce with
+`python src/ablation.py --n-seeds 8`.
+
+C.1 Feature ablation (Pillar 2, XGBoost)
+
+The full-feature XGBoost macro-F1 baseline over these 8 seeds is
+0.800 ± 0.034. Each row removes one feature and retrains.
+
+| Removed feature | Ablated macro-F1 | Drop vs full (importance) |
+|-----------------|-----------------:|--------------------------:|
+| ply_count | 0.547 ± 0.072 | 0.253 ± 0.050 |
+| zone_complexity | 0.597 ± 0.048 | 0.203 ± 0.056 |
+| void_probability | 0.626 ± 0.027 | 0.174 ± 0.049 |
+| thickness_variation | 0.628 ± 0.054 | 0.172 ± 0.058 |
+| fastener_density | 0.683 ± 0.056 | 0.117 ± 0.047 |
+
+All five importance drops are significantly positive (CI excludes 0),
+confirming a non-redundant feature set.
+
+C.2 Design-choice ablation (Pillar 3, RCS flag distribution at t = 10)
+
+| Configuration | GREEN | YELLOW | RED |
+|---------------|------:|-------:|----:|
+| full (blend = 0.55, drift on) | 271.2 ± 28.3 | 63.8 ± 28.4 | 165.0 ± 8.1 |
+| no Φ prior (blend = 1.0, drift on) | 327.6 ± 11.1 | 8.4 ± 9.0 | 164.0 ± 8.1 |
+| no drift (blend = 0.55, drift off) | 333.5 ± 8.2 | 4.8 ± 4.8 | 161.8 ± 8.4 |
+| minimal (blend = 1.0, drift off) | 335.4 ± 8.2 | 2.5 ± 2.4 | 162.1 ± 8.4 |
+
+The Φ-blended prior is responsible for an 8× larger YELLOW band; the RED
+population is invariant to the design choices (the framework never fails
+to flag clearly-damaged components). The figure is
+`results/ablation.png`.
 
    

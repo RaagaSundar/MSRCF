@@ -1,0 +1,115 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "msrcf"
+version = "0.2.0"
+description = "Manufacture-to-Service Risk Continuity Framework for aerospace CFRP structures"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Sundar Raaga" }]
+keywords = ["aerospace", "composites", "risk", "structural-health-monitoring", "machine-learning"]
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "scikit-learn>=1.4",
+    "scipy>=1.10",
+    "matplotlib>=3.7",
+    "seaborn>=0.13",
+    "xgboost>=2.0",
+    "shap>=0.43",
+    "SALib>=1.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.4",
+    "mypy>=1.8",
+    "scikit-posthocs>=0.9",
+]
+
+[project.scripts]
+msrcf = "main:cli"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+py-modules = [
+    "config",
+    "data_generator",
+    "risk_matrix",
+    "damage_predictor",
+    "rcs_engine",
+    "rul_predictor",
+    "anomaly_detector",
+    "explainability",
+    "sensitivity",
+    "experiments",
+    "ablation",
+    "dashboard",
+    "main",
+]
+
+# ---------------------------------------------------------------------------
+# Ruff - linting + import sorting
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I isort, UP pyupgrade, B bugbear, C4 comprehensions
+select = ["E", "W", "F", "I", "UP", "B", "C4"]
+ignore = [
+    "E501",  # line length handled case-by-case; long docstring lines are fine
+    "B008",  # function calls in argument defaults (not used dangerously here)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]  # sys.path manipulation before imports in conftest
+
+# ---------------------------------------------------------------------------
+# mypy - static typing (lenient: this is research code with sklearn/np)
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_unused_ignores = false
+warn_redundant_casts = true
+no_implicit_optional = true
+files = ["src"]
+# Research code leans on numpy/pandas dynamic typing; we keep mypy honest
+# about obvious mistakes without demanding full annotation coverage.
+disallow_untyped_defs = false
+check_untyped_defs = false
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# By default we skip the training-heavy integration tests so the suite
+# (and CI) stays under ~15 s. Run the full set with `pytest -m ""` or
+# `make test-slow`.
+addopts = "-q -m 'not slow'"
+markers = [
+    "slow: long-running integration tests that train many models",
+]
+
+# ---------------------------------------------------------------------------
+# coverage
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["src"]
+omit = ["src/main.py", "src/dashboard.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]

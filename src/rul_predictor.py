@@ -30,8 +30,8 @@ can use to prioritise inspection slots.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 import numpy as np
 import pandas as pd
@@ -55,9 +55,9 @@ class RULResult:
 
     component_ids: list[str]
     cycles_extended: list[int]
-    rcs_extended: np.ndarray       # shape (n_cycles_ext, n_components)
-    cycles_to_yellow: np.ndarray   # shape (n_components,) - int or NaN
-    cycles_to_red: np.ndarray      # shape (n_components,) - int or NaN
+    rcs_extended: np.ndarray  # shape (n_cycles_ext, n_components)
+    cycles_to_yellow: np.ndarray  # shape (n_components,) - int or NaN
+    cycles_to_red: np.ndarray  # shape (n_components,) - int or NaN
 
     def to_dataframe(self) -> pd.DataFrame:
         return pd.DataFrame(
@@ -137,13 +137,9 @@ def forecast_rul(
 
     # Continue the Bayesian update forward through future_cycles.
     p_dam_future = np.zeros((len(future_cycles), n), dtype=float)
-    p_dam_future[0] = bayesian_update(
-        last_p_damage, classifier_damage, future_cycles[0]
-    )
+    p_dam_future[0] = bayesian_update(last_p_damage, classifier_damage, future_cycles[0])
     for k in range(1, len(future_cycles)):
-        p_dam_future[k] = bayesian_update(
-            p_dam_future[k - 1], classifier_damage, future_cycles[k]
-        )
+        p_dam_future[k] = bayesian_update(p_dam_future[k - 1], classifier_damage, future_cycles[k])
 
     # Build the extended RCS trajectory by concatenating "before" and
     # "after" the last simulated cycle. We only have last_p_damage so
@@ -154,12 +150,9 @@ def forecast_rul(
     # Smooth linear ramp - this is just for visualisation continuity;
     # the actual RUL crossing uses the future window only.
     ramp_weights = np.linspace(0.0, 1.0, n_before)
-    p_dam_before = (
-        ramp_weights[:, np.newaxis] * last_p_damage[np.newaxis, :]
-        + (1 - ramp_weights[:, np.newaxis]) * np.maximum(
-            0.0, last_p_damage[np.newaxis, :] - 0.3
-        )
-    )
+    p_dam_before = ramp_weights[:, np.newaxis] * last_p_damage[np.newaxis, :] + (
+        1 - ramp_weights[:, np.newaxis]
+    ) * np.maximum(0.0, last_p_damage[np.newaxis, :] - 0.3)
 
     p_dam_ext = np.vstack([p_dam_before, p_dam_future])
     deg_ext = degradation_factor(np.asarray(extended_cycles, dtype=float))

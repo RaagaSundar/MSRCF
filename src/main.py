@@ -38,17 +38,16 @@ PROJECT_ROOT = os.path.dirname(HERE)
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-import anomaly_detector             # noqa: E402
-import config as cfg                # noqa: E402
-import damage_predictor as dp       # noqa: E402
-import dashboard                    # noqa: E402
-import data_generator               # noqa: E402
-import explainability               # noqa: E402
-import rcs_engine                   # noqa: E402
-import risk_matrix                  # noqa: E402
-import rul_predictor                # noqa: E402
-import sensitivity                  # noqa: E402
-
+import anomaly_detector  # noqa: E402
+import config as cfg  # noqa: E402
+import damage_predictor as dp  # noqa: E402
+import dashboard  # noqa: E402
+import data_generator  # noqa: E402
+import explainability  # noqa: E402
+import rcs_engine  # noqa: E402
+import risk_matrix  # noqa: E402
+import rul_predictor  # noqa: E402
+import sensitivity  # noqa: E402
 
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 RESULTS_DIR = os.path.join(PROJECT_ROOT, "results")
@@ -64,28 +63,36 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Run the MSRCF end-to-end pipeline.",
     )
     parser.add_argument(
-        "--n-components", type=int, default=500,
+        "--n-components",
+        type=int,
+        default=500,
         help="Number of synthetic components to generate (default 500).",
     )
     parser.add_argument(
-        "--seed", type=int, default=cfg.RANDOM_SEED,
+        "--seed",
+        type=int,
+        default=cfg.RANDOM_SEED,
         help=f"RNG seed (default {cfg.RANDOM_SEED}).",
     )
     parser.add_argument(
-        "--tune-best", action="store_true",
+        "--tune-best",
+        action="store_true",
         help="Run a GridSearchCV refinement on the best baseline model.",
     )
     parser.add_argument(
-        "--mc-samples", type=int, default=cfg.MC_SAMPLES,
-        help=f"Monte Carlo samples for the RCS uncertainty band "
-             f"(default {cfg.MC_SAMPLES}).",
+        "--mc-samples",
+        type=int,
+        default=cfg.MC_SAMPLES,
+        help=f"Monte Carlo samples for the RCS uncertainty band (default {cfg.MC_SAMPLES}).",
     )
     parser.add_argument(
-        "--skip-shap", action="store_true",
+        "--skip-shap",
+        action="store_true",
         help="Skip the SHAP explainability stage.",
     )
     parser.add_argument(
-        "--skip-sobol", action="store_true",
+        "--skip-sobol",
+        action="store_true",
         help="Skip the Sobol sensitivity analysis stage.",
     )
     return parser.parse_args(argv)
@@ -109,10 +116,7 @@ def run_pipeline(args: argparse.Namespace) -> dict:
     print("  damage_mode counts   :")
     counts = df["damage_mode"].value_counts().sort_index()
     for cls, ct in counts.items():
-        print(
-            f"    class {cls} "
-            f"({dp.DAMAGE_CLASS_NAMES[int(cls)]:<18}) : {ct}"
-        )
+        print(f"    class {cls} ({dp.DAMAGE_CLASS_NAMES[int(cls)]:<18}) : {ct}")
 
     # -----------------------------------------------------------------
     # 2) Phi_composite risk-matrix scoring (Pillar 1)
@@ -128,9 +132,7 @@ def run_pipeline(args: argparse.Namespace) -> dict:
         f"{scored_df['phi_composite'].max():.2f}"
     )
     for tier, ct in (
-        scored_df["risk_tier"]
-        .value_counts()
-        .reindex(["Low", "Moderate", "High", "Critical"])
+        scored_df["risk_tier"].value_counts().reindex(["Low", "Moderate", "High", "Critical"])
     ).items():
         print(f"    {str(tier):<10} : {int(ct)}")
     scored_csv = os.path.join(DATA_DIR, "msrcf_scored_dataset.csv")
@@ -157,9 +159,7 @@ def run_pipeline(args: argparse.Namespace) -> dict:
         }
         grid = grid_map.get(best.name)
         if grid is None:
-            print(
-                f"  (no tuning grid configured for {best.name} - skipping)"
-            )
+            print(f"  (no tuning grid configured for {best.name} - skipping)")
         else:
             tuned = dp.tune_model(
                 name=best.name,
@@ -170,14 +170,10 @@ def run_pipeline(args: argparse.Namespace) -> dict:
                 y_test=splits["y_test"],
                 param_grid=grid,
             )
-            print(
-                f"  tuned    : accuracy={tuned.accuracy:.3f}, "
-                f"macro-F1={tuned.f1_macro:.3f}"
-            )
+            print(f"  tuned    : accuracy={tuned.accuracy:.3f}, macro-F1={tuned.f1_macro:.3f}")
             if (tuned.f1_macro, tuned.accuracy) > (best.f1_macro, best.accuracy):
                 print(
-                    f"  >> tuned model improves the baseline; "
-                    f"promoting {tuned.name} to production"
+                    f"  >> tuned model improves the baseline; promoting {tuned.name} to production"
                 )
                 results[tuned.name] = tuned
                 best = tuned
@@ -200,8 +196,8 @@ def run_pipeline(args: argparse.Namespace) -> dict:
         class_labels=class_labels,
     )
     print(f"  cycles simulated      : {trajectory.cycles[0]}..{trajectory.cycles[-1]}")
-    print(f"  per-class shapes      : "
-          f"rcs_per_class={trajectory.rcs_per_class.shape}")
+    assert trajectory.rcs_per_class is not None  # always set by compute_rcs_trajectory
+    print(f"  per-class shapes      : rcs_per_class={trajectory.rcs_per_class.shape}")
     final_rcs = trajectory.rcs_normalised[-1]
     print(f"  final RCS range       : {np.min(final_rcs):.2f} - {np.max(final_rcs):.2f}")
 
@@ -298,9 +294,7 @@ def run_pipeline(args: argparse.Namespace) -> dict:
             output_path=os.path.join(RESULTS_DIR, "feature_attribution.png"),
         )
         print(f"  feature attribution   : {shap_path}")
-        importance_df.to_csv(
-            os.path.join(RESULTS_DIR, "feature_attribution.csv")
-        )
+        importance_df.to_csv(os.path.join(RESULTS_DIR, "feature_attribution.csv"))
     else:
         print("  (--skip-shap; skipping)")
 
@@ -355,26 +349,23 @@ def run_pipeline(args: argparse.Namespace) -> dict:
         trajectory, os.path.join(RESULTS_DIR, "rcs_trajectories_mc.png")
     )
     pc_path = dashboard.plot_rcs_per_class(
-        trajectory, dp.DAMAGE_CLASS_NAMES,
+        trajectory,
+        dp.DAMAGE_CLASS_NAMES,
         os.path.join(RESULTS_DIR, "rcs_per_class.png"),
     )
-    rul_path = dashboard.plot_rul_histogram(
-        rul_df, os.path.join(RESULTS_DIR, "rul_histogram.png")
-    )
+    rul_path = dashboard.plot_rul_histogram(rul_df, os.path.join(RESULTS_DIR, "rul_histogram.png"))
     dash_path = dashboard.plot_risk_dashboard(
-        scored_df, trajectory,
+        scored_df,
+        trajectory,
         os.path.join(RESULTS_DIR, "risk_dashboard.png"),
     )
-    final_rcs_series = pd.Series(
-        trajectory.rcs_normalised[-1], index=trajectory.component_ids
-    )
+    final_rcs_series = pd.Series(trajectory.rcs_normalised[-1], index=trajectory.component_ids)
     anom_path = dashboard.plot_anomaly_scatter(
         anomaly_df,
         output_path=os.path.join(RESULTS_DIR, "anomaly_scatter.png"),
         final_rcs=final_rcs_series,
     )
-    for p in (cm_path, bar_path, rcs_path, mc_path, pc_path, rul_path,
-              dash_path, anom_path):
+    for p in (cm_path, bar_path, rcs_path, mc_path, pc_path, rul_path, dash_path, anom_path):
         print(f"  saved : {p}")
 
     _section("Summary")
@@ -408,5 +399,10 @@ def run_pipeline(args: argparse.Namespace) -> dict:
     }
 
 
+def cli(argv: list[str] | None = None) -> dict:
+    """Console-script entry point: parse argv then run the pipeline."""
+    return run_pipeline(_parse_args(argv))
+
+
 if __name__ == "__main__":
-    run_pipeline(_parse_args())
+    cli()

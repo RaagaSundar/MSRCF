@@ -35,8 +35,8 @@ re-validated each run in `select_best_model()`.
 from __future__ import annotations
 
 import warnings
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable
 
 import numpy as np
 import pandas as pd
@@ -60,7 +60,6 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
-
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -107,12 +106,19 @@ class ModelResult:
 # ---------------------------------------------------------------------------
 # Model factory
 # ---------------------------------------------------------------------------
-def _build_estimators() -> dict[str, Pipeline]:
+def _build_estimators(seed: int = RANDOM_SEED) -> dict[str, Pipeline]:
     """
     Build the five candidate classifiers wrapped in standard-scaling
     pipelines. Hyperparameters are deliberately conservative defaults -
     the goal of this study is *comparative*, not state-of-the-art tuned
     performance.
+
+    Parameters
+    ----------
+    seed : int
+        Random state threaded into every stochastic estimator. Exposed
+        so the multi-seed experiment harness (experiments.py) can obtain
+        independent model realisations per seed.
 
     Notes on choices:
         - SVC with RBF kernel and probability=True so we can get
@@ -137,7 +143,7 @@ def _build_estimators() -> dict[str, Pipeline]:
                         C=2.0,
                         gamma="scale",
                         probability=True,
-                        random_state=RANDOM_SEED,
+                        random_state=seed,
                     ),
                 ),
             ]
@@ -150,7 +156,7 @@ def _build_estimators() -> dict[str, Pipeline]:
                     RandomForestClassifier(
                         n_estimators=300,
                         max_depth=None,
-                        random_state=RANDOM_SEED,
+                        random_state=seed,
                         n_jobs=-1,
                     ),
                 ),
@@ -163,7 +169,7 @@ def _build_estimators() -> dict[str, Pipeline]:
                     "clf",
                     LogisticRegression(
                         max_iter=1000,
-                        random_state=RANDOM_SEED,
+                        random_state=seed,
                     ),
                 ),
             ]
@@ -186,7 +192,7 @@ def _build_estimators() -> dict[str, Pipeline]:
                         objective="multi:softprob",
                         eval_metric="mlogloss",
                         tree_method="hist",
-                        random_state=RANDOM_SEED,
+                        random_state=seed,
                         n_jobs=-1,
                     ),
                 ),
@@ -205,6 +211,7 @@ def train_and_evaluate(
     target_column: str = TARGET_COLUMN,
     test_size: float = 0.20,
     n_splits: int = 5,
+    seed: int = RANDOM_SEED,
 ) -> tuple[dict[str, ModelResult], dict[str, np.ndarray]]:
     """
     Train all five classifiers on `df` and evaluate them on a stratified
@@ -214,19 +221,27 @@ def train_and_evaluate(
     The `splits` dict exposes the X_train/X_test/y_train/y_test arrays
     so callers (notably main.py) can pass them on to the RCS engine
     without re-splitting and risking a different split.
+
+    Parameters
+    ----------
+    seed : int
+        Random state for the train/test split, the CV folds, and the
+        model initialisations. Threading this through makes the whole
+        benchmark a deterministic function of `seed`, which the
+        multi-seed harness in experiments.py relies on.
     """
     feature_columns = list(feature_columns)
     X = df[feature_columns].to_numpy(dtype=float)
     y = df[target_column].to_numpy(dtype=int)
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=test_size, random_state=RANDOM_SEED, stratify=y
+        X, y, test_size=test_size, random_state=seed, stratify=y
     )
 
-    estimators = _build_estimators()
+    estimators = _build_estimators(seed=seed)
     results: dict[str, ModelResult] = {}
 
-    cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=RANDOM_SEED)
+    cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
 
     class_labels = sorted(np.unique(y).tolist())
 
@@ -242,9 +257,7 @@ def train_and_evaluate(
             y_pred = est.predict(X_test)
 
             acc = accuracy_score(y_test, y_pred)
-            prec = precision_score(
-                y_test, y_pred, average="macro", zero_division=0
-            )
+            prec = precision_score(y_test, y_pred, average="macro", zero_division=0)
             rec = recall_score(y_test, y_pred, average="macro", zero_division=0)
             f1 = f1_score(y_test, y_pred, average="macro", zero_division=0)
             cm = confusion_matrix(y_test, y_pred, labels=class_labels)

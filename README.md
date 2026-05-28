@@ -1,5 +1,11 @@
 # MSRCF
 
+[![CI](https://github.com/RaagaSundar/MSRCF/actions/workflows/ci.yml/badge.svg)](https://github.com/RaagaSundar/MSRCF/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/)
+[![Code style: ruff](https://img.shields.io/badge/lint-ruff-orange.svg)](https://github.com/astral-sh/ruff)
+[![Checked with mypy](https://img.shields.io/badge/types-mypy-blue.svg)](https://mypy-lang.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](#license)
+
 A Python project for tracking aerospace composite panels from manufacture through their service life using a single risk number.
 
 The idea is simple. Factory engineers use one set of models to flag risky parts at build time. Maintenance engineers use a different set to track damage once the part is flying. Nobody connects them. This project does. It computes a Risk Continuity Score (RCS) for every component that starts at "as-built" and updates each inspection cycle, so there's always one number telling you how worried to be about each part.
@@ -53,13 +59,52 @@ Other useful flags:
 - `--skip-shap` -- skip SHAP (saves about 5 seconds)
 - `--skip-sobol` -- skip Sobol sensitivity
 
+## Statistical evaluation
+
+A single run on one seed isn't enough to claim one model beats another. Two
+extra scripts do the rigorous version:
+
+```
+python src/experiments.py --n-seeds 15   # every metric as mean +/- 95% CI
+python src/ablation.py    --n-seeds 8    # prove each feature/design choice earns its place
+```
+
+`experiments.py` re-runs the whole benchmark across many seeds, reports each
+metric as a mean with a 95% confidence interval, then runs a Friedman test
+plus a Nemenyi post-hoc (the standard way to compare classifiers over many
+runs) and draws a critical-difference diagram. `ablation.py` drops each
+feature one at a time and toggles the two RCS design choices, so you can see
+exactly how much each piece contributes. Both write figures and CSVs into
+`results/`.
+
+The maths behind all of this -- the RCS bounds, the Bayesian update written
+as a log-odds recursion, and the significance tests -- is derived in the
+appendices of the technical report.
+
 ## Run the tests
 
 ```
-python -m pytest tests/
+python -m pytest          # fast unit tests (~13 s)
+python -m pytest -m ""     # include the slow training-heavy integration tests
 ```
 
-18 tests, takes about 5 seconds.
+The fast suite has 24 tests covering dataset physics, the risk-matrix bounds,
+the Bayesian update, RUL ordering, the anomaly detector, and the statistics
+helpers (the confidence-interval and Nemenyi math are checked against known
+values). The training-heavy multi-seed and ablation tests are marked `slow`
+and skipped by default.
+
+## Make targets
+
+If you have `make`:
+
+```
+make install     # runtime + dev dependencies
+make run          # full pipeline
+make experiments  # multi-seed benchmark + significance tests
+make ablation     # ablation study
+make all          # lint + type-check + test
+```
 
 ## What you get out
 
@@ -88,6 +133,13 @@ After a run you'll have:
 - `sobol_sensitivity.png` -- Phi weight sensitivity
 - plus CSV versions of the metrics
 
+From `experiments.py` and `ablation.py`:
+
+- `multiseed_forest.png` -- per-model metrics with 95% CI over the seed ensemble
+- `critical_difference.png` -- Friedman/Nemenyi critical-difference diagram
+- `ablation.png` -- feature importance + RCS design-choice ablation
+- plus `multiseed_summary.csv`, `multiseed_per_seed.csv`, `ablation_features.csv`, `ablation_design.csv`
+
 ## Project layout
 
 ```
@@ -109,8 +161,14 @@ Source files:
 - `anomaly_detector.py` -- Isolation Forest
 - `explainability.py` -- SHAP, ROC, calibration
 - `sensitivity.py` -- Sobol sensitivity
+- `experiments.py` -- multi-seed benchmark + Friedman/Nemenyi
+- `ablation.py` -- feature + design-choice ablation
 - `dashboard.py` -- plots
 - `main.py` -- runs everything in order
+
+Plus `pyproject.toml` (packaging + ruff/mypy/pytest config), a `Makefile`,
+and a GitHub Actions workflow (`.github/workflows/ci.yml`) that runs lint,
+type-check, and tests on Python 3.10/3.11/3.12.
 
 ## A few things to know
 
@@ -121,3 +179,7 @@ Source files:
 ## Read more
 
 Full methodology and results are in `report/MSRCF_Technical_Report.md`.
+
+## License
+
+MIT. See `LICENSE`.

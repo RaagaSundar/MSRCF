@@ -36,11 +36,9 @@ The output is Phi_composite, a continuous score on roughly [5, 25].
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence
 
 import numpy as np
 import pandas as pd
-
 
 # ---------------------------------------------------------------------------
 # Feature ordering and weights (locked - do not reorder without updating the
@@ -87,7 +85,7 @@ class RiskMatrixModel:
     # Fitting and scoring
     # -----------------------------------------------------------------
     @classmethod
-    def fit(cls, df: pd.DataFrame) -> "RiskMatrixModel":
+    def fit(cls, df: pd.DataFrame) -> RiskMatrixModel:
         """
         Learn percentile-based bin edges from a population of components.
 
@@ -162,7 +160,7 @@ def fit_and_score(df: pd.DataFrame) -> tuple[RiskMatrixModel, pd.DataFrame]:
 
 def get_feature_weights() -> dict[str, float]:
     """Return the fixed feature weight vector as a name->weight mapping."""
-    return dict(zip(FEATURE_ORDER, WEIGHTS.tolist()))
+    return dict(zip(FEATURE_ORDER, WEIGHTS.tolist(), strict=True))
 
 
 __all__ = [
@@ -176,7 +174,6 @@ __all__ = [
 
 
 if __name__ == "__main__":
-    import os
     import data_generator
 
     df = data_generator.generate_dataset(n_components=500)

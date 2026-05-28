@@ -21,7 +21,6 @@ confidence on it is suspect.
 
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
@@ -51,7 +50,7 @@ def fit_anomaly_detector(
         n_jobs=-1,
     )
     model.fit(Xs)
-    raw = model.decision_function(Xs)        # higher = MORE normal
+    raw = model.decision_function(Xs)  # higher = MORE normal
     is_anom = model.predict(Xs) == -1
 
     out = df.copy()

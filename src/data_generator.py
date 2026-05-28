@@ -36,7 +36,6 @@ import os
 import numpy as np
 import pandas as pd
 
-
 # ---------------------------------------------------------------------------
 # Reproducibility
 # ---------------------------------------------------------------------------
@@ -196,13 +195,13 @@ def _label_damage_mode(
     # others: this gives a usable class balance (no class < 4 % of the
     # dataset) while still respecting the qualitative priority stated in
     # the project brief.
-    delam_pull = ((df["void_probability"] > 0.04) & (df["ply_count"] > 20)).astype(
-        float
-    ) * (df["void_probability"] * 15.0 + 1.0)
+    delam_pull = ((df["void_probability"] > 0.04) & (df["ply_count"] > 20)).astype(float) * (
+        df["void_probability"] * 15.0 + 1.0
+    )
 
-    matrix_pull = (
-        (df["fastener_density"] > 15) & (df["thickness_variation"] > 0.3)
-    ).astype(float) * (df["thickness_variation"] * 4.0 + 1.5)
+    matrix_pull = ((df["fastener_density"] > 15) & (df["thickness_variation"] > 0.3)).astype(
+        float
+    ) * (df["thickness_variation"] * 4.0 + 1.5)
 
     fiber_pull = ((df["ply_count"] > 30) & (df["zone_complexity"] > 8)).astype(float) * (
         0.07 * df["ply_count"] + 0.15 * df["zone_complexity"]
@@ -214,9 +213,7 @@ def _label_damage_mode(
     # so fatigue does not swamp the other modes in a static snapshot.
     fatigue_gate = (rng.random(n) < 0.50).astype(float)
     fatigue_pull = (
-        (phi_composite > 15.0).astype(float)
-        * fatigue_gate
-        * (0.10 * phi_composite + 0.5)
+        (phi_composite > 15.0).astype(float) * fatigue_gate * (0.10 * phi_composite + 0.5)
     )
 
     # Apply the same noise term to all candidate pulls so a single
@@ -225,11 +222,11 @@ def _label_damage_mode(
     # cleanly.
     pulls = np.vstack(
         [
-            np.zeros(n) + 0.2,                         # baseline (class 0)
-            np.asarray(matrix_pull) + noise,           # class 1
-            np.asarray(delam_pull) + noise,            # class 2
-            np.asarray(fiber_pull) + noise,            # class 3
-            np.asarray(fatigue_pull) + noise,          # class 4
+            np.zeros(n) + 0.2,  # baseline (class 0)
+            np.asarray(matrix_pull) + noise,  # class 1
+            np.asarray(delam_pull) + noise,  # class 2
+            np.asarray(fiber_pull) + noise,  # class 3
+            np.asarray(fatigue_pull) + noise,  # class 4
         ]
     )
 

@@ -20,9 +20,7 @@ def test_rul_monotone_or_naninf(scored_dataset):
     )
     # cycles_to_yellow <= cycles_to_red where both are finite.
     both = ~np.isnan(result.cycles_to_yellow) & ~np.isnan(result.cycles_to_red)
-    assert (
-        result.cycles_to_yellow[both] <= result.cycles_to_red[both] + 1e-9
-    ).all()
+    assert (result.cycles_to_yellow[both] <= result.cycles_to_red[both] + 1e-9).all()
     assert result.rcs_extended.shape == (41, n)
 
 

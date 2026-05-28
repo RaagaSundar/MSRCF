@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import os
 import warnings
-from typing import Iterable
 
 import matplotlib
 
@@ -69,7 +68,6 @@ def shap_feature_importance(
         # classifier and pre-scaled feature matrix.
         clf = getattr(estimator, "named_steps", {}).get("clf", estimator)
         scaler = getattr(estimator, "named_steps", {}).get("scaler", None)
-        Xb_proc = scaler.transform(X_background) if scaler is not None else X_background
         Xe_proc = scaler.transform(X_explain) if scaler is not None else X_explain
 
         # TreeExplainer is the fast path for XGBoost / RandomForest.
@@ -98,7 +96,10 @@ def shap_feature_importance(
         )
     except Exception as exc:  # pragma: no cover (fallback only)
         # Fallback: permutation importance.
-        warnings.warn(f"SHAP failed ({exc}); falling back to permutation importance")
+        warnings.warn(
+            f"SHAP failed ({exc}); falling back to permutation importance",
+            stacklevel=2,
+        )
         result = permutation_importance(
             estimator,
             X_background,
@@ -170,7 +171,7 @@ def roc_and_calibration(
     palette = sns.color_palette("tab10", n_colors=len(class_labels))
     ax_roc.plot([0, 1], [0, 1], "--", color="gray", linewidth=1)
 
-    for color, j, c in zip(palette, range(len(class_labels)), class_labels):
+    for color, j, c in zip(palette, range(len(class_labels)), class_labels, strict=True):
         y_bin = (y_test == c).astype(int)
         if y_bin.sum() == 0:
             continue

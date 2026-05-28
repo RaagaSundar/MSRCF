@@ -72,19 +72,18 @@ posterior locking exactly at 0 or 1.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable
 
 import numpy as np
 import pandas as pd
 
-
 # ---------------------------------------------------------------------------
 # RCS coefficients - locked per project brief
 # ---------------------------------------------------------------------------
-ALPHA = 0.4   # manufacturing baseline weight
-BETA = 0.4    # current damage probability weight
-GAMMA = 0.2   # service degradation weight
+ALPHA = 0.4  # manufacturing baseline weight
+BETA = 0.4  # current damage probability weight
+GAMMA = 0.2  # service degradation weight
 LAMBDA = 0.15  # exponential degradation rate
 
 # Cycle range used for trajectory plots and the cumulative RCS.
@@ -147,9 +146,7 @@ def degradation_factor(t: int | np.ndarray, lam: float = LAMBDA) -> np.ndarray:
     return 1.0 - np.exp(-lam * np.asarray(t, dtype=float))
 
 
-def bayesian_update(
-    prior: np.ndarray, classifier_prob: np.ndarray, cycle: int
-) -> np.ndarray:
+def bayesian_update(prior: np.ndarray, classifier_prob: np.ndarray, cycle: int) -> np.ndarray:
     """
     Single per-cycle Bayesian step.
 
@@ -181,12 +178,12 @@ class RCSTrajectory:
 
     component_ids: list[str]
     cycles: list[int]
-    phi_composite: np.ndarray           # shape (n_components,)
-    p_damage: np.ndarray                # shape (n_cycles, n_components)
-    degradation: np.ndarray             # shape (n_cycles,)
-    rcs_raw: np.ndarray                 # shape (n_cycles, n_components)
-    rcs_normalised: np.ndarray          # shape (n_cycles, n_components)
-    flag: np.ndarray                    # shape (n_cycles, n_components) dtype=object
+    phi_composite: np.ndarray  # shape (n_components,)
+    p_damage: np.ndarray  # shape (n_cycles, n_components)
+    degradation: np.ndarray  # shape (n_cycles,)
+    rcs_raw: np.ndarray  # shape (n_cycles, n_components)
+    rcs_normalised: np.ndarray  # shape (n_cycles, n_components)
+    flag: np.ndarray  # shape (n_cycles, n_components) dtype=object
     # Per-damage-mode RCS contributions, shape
     # (n_cycles, n_components, n_damage_modes). Index k is in
     # `damage_class_labels`; ordering excludes the nominal class.
@@ -271,18 +268,14 @@ def compute_rcs_trajectory(
         raise ValueError("init_probs rows must match number of components")
 
     if nominal_class not in class_labels:
-        raise ValueError(
-            f"nominal_class {nominal_class} not found in class_labels {class_labels}"
-        )
+        raise ValueError(f"nominal_class {nominal_class} not found in class_labels {class_labels}")
     nominal_idx = class_labels.index(nominal_class)
 
     # Raw classifier signal: probability the component is in ANY damaged
     # class.
     classifier_damage = 1.0 - init_probs[:, nominal_idx]
     # Phi-derived prior: normalised Phi_composite into [0, 1].
-    phi_norm = np.clip(
-        (phi_composite - PHI_MIN) / (PHI_MAX - PHI_MIN), 0.0, 1.0
-    )
+    phi_norm = np.clip((phi_composite - PHI_MIN) / (PHI_MAX - PHI_MIN), 0.0, 1.0)
     # Blend the two signals to form the initial P_damage. The pure
     # classifier signal is highly bimodal on an accurate classifier,
     # which collapses the YELLOW operational band. Blending with the
@@ -323,14 +316,10 @@ def compute_rcs_trajectory(
     # P(class=k) as its own running posterior and combining with the
     # same Phi / degradation contributions.
     # ---------------------------------------------------------------
-    damage_class_indices = [
-        j for j, c in enumerate(class_labels) if c != nominal_class
-    ]
+    damage_class_indices = [j for j, c in enumerate(class_labels) if c != nominal_class]
     damage_class_labels = [class_labels[j] for j in damage_class_indices]
 
-    rcs_per_class = np.zeros(
-        (n_cycles, n_components, len(damage_class_indices)), dtype=float
-    )
+    rcs_per_class = np.zeros((n_cycles, n_components, len(damage_class_indices)), dtype=float)
     for j_idx, j in enumerate(damage_class_indices):
         per_cls_signal = init_probs[:, j]
         per_cls_phi_prior = PRIOR_BLEND * per_cls_signal + (1 - PRIOR_BLEND) * phi_norm
@@ -404,10 +393,7 @@ def compute_rcs_mc_band(
     # the per-class decomposition) so leaving them un-normalised is
     # safe and preserves the intended MC variance.
     eps = 1e-6
-    base_logit = np.log(
-        np.clip(init_probs, eps, 1 - eps)
-        / np.clip(1 - init_probs, eps, 1 - eps)
-    )
+    base_logit = np.log(np.clip(init_probs, eps, 1 - eps) / np.clip(1 - init_probs, eps, 1 - eps))
 
     for s in range(n_samples):
         noise = rng.normal(0.0, noise_sigma, size=base_logit.shape)
