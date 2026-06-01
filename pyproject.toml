@@ -9,7 +9,7 @@ description = "Manufacture-to-Service Risk Continuity Framework for aerospace CF
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "Sundar Raaga" }]
+authors = [{ name = "Raaga Sundar" }]
 keywords = ["aerospace", "composites", "risk", "structural-health-monitoring", "machine-learning"]
 dependencies = [
     "numpy>=1.24",
@@ -47,6 +47,7 @@ py-modules = [
     "anomaly_detector",
     "explainability",
     "sensitivity",
+    "conformal",
     "experiments",
     "ablation",
     "dashboard",

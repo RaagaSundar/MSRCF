@@ -26,6 +26,7 @@ On top of that you also get:
 - SHAP feature importance and ROC / calibration plots for the classifier.
 - Sobol sensitivity on the Phi weight vector.
 - Isolation Forest anomaly flagging for components that look strange.
+- Conformal prediction sets with a guaranteed coverage level, so you can say "the true damage mode is in this set at least 90% of the time" instead of just trusting the single best guess.
 
 ## Setup
 
@@ -58,6 +59,7 @@ Other useful flags:
 - `--mc-samples 500` -- tighter Monte Carlo bands
 - `--skip-shap` -- skip SHAP (saves about 5 seconds)
 - `--skip-sobol` -- skip Sobol sensitivity
+- `--skip-conformal` -- skip conformal prediction sets
 
 ## Statistical evaluation
 
@@ -131,6 +133,7 @@ After a run you'll have:
 - `feature_attribution.png` -- SHAP heatmap
 - `roc_calibration.png` -- ROC and reliability curves
 - `sobol_sensitivity.png` -- Phi weight sensitivity
+- `conformal_coverage.png` -- conformal coverage + set-size curves (with `conformal_metrics.csv` and `conformal_per_class.csv`)
 - plus CSV versions of the metrics
 
 From `experiments.py` and `ablation.py`:
@@ -161,6 +164,7 @@ Source files:
 - `anomaly_detector.py` -- Isolation Forest
 - `explainability.py` -- SHAP, ROC, calibration
 - `sensitivity.py` -- Sobol sensitivity
+- `conformal.py` -- conformal prediction sets (LAC + APS)
 - `experiments.py` -- multi-seed benchmark + Friedman/Nemenyi
 - `ablation.py` -- feature + design-choice ablation
 - `dashboard.py` -- plots

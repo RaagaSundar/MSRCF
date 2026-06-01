@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use this software or framework, please cite it as below."
+title: "MSRCF: Manufacture-to-Service Risk Continuity Framework for Aerospace CFRP Structures"
+abstract: >-
+  A reproducible Python framework that unifies upstream manufacturing
+  complexity with downstream in-service damage prediction for carbon-fibre
+  composite aerospace structures. It scores manufacturing risk on a
+  five-feature Phi_composite matrix, benchmarks five damage-mode
+  classifiers, fuses both signals through a Bayesian Risk Continuity Score
+  (RCS) over time, and adds Monte Carlo uncertainty bands, Remaining Useful
+  Life forecasting, SHAP/ROC/calibration diagnostics, Sobol sensitivity,
+  Isolation Forest anomaly detection, and split conformal prediction sets
+  with distribution-free coverage guarantees.
+type: software
+authors:
+  - given-names: Raaga
+    family-names: Sundar
+version: 0.2.0
+date-released: "2026-06-01"
+license: MIT
+repository-code: "https://github.com/RaagaSundar/MSRCF"
+keywords:
+  - aerospace
+  - composites
+  - structural-health-monitoring
+  - risk-assessment
+  - machine-learning
+  - conformal-prediction
+  - uncertainty-quantification

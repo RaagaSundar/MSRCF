@@ -86,6 +86,11 @@ MSRCF is the present author's response to that gap.
    curves**, **Sobol' global sensitivity**, and an **IsolationForest
    anomaly layer** as audit / interpretability companions to the core
    pipeline.
+8. **Conformal prediction sets** that attach a distribution-free,
+   finite-sample coverage guarantee to each component's predicted
+   damage mode, with a LAC-versus-APS comparison that exposes a
+   marginal-versus-class-conditional coverage trade-off on the
+   safety-critical minority modes.
 
 The remainder of the paper describes the methodology for each pillar
 (§2), reports the experimental results (§3), discusses tuning
@@ -292,6 +297,36 @@ For the production classifier we compute:
 - **Reliability (calibration) curves** with quantile binning, plus
   per-class **Brier scores**.
 
+2.6.1 Conformal prediction sets
+
+Even a well-calibrated probability still leaves the operator to choose
+an action threshold by hand. We add a layer of split (inductive)
+conformal prediction (Vovk et al., 2005; Romano et al., 2020) that turns
+the classifier output into a prediction *set* of damage modes carrying a
+finite-sample, distribution-free guarantee: for a chosen miscoverage
+rate α, the true mode is contained in the set with probability at least
+1 − α, assuming only that the calibration and test data are exchangeable
+— nothing about the classifier or the feature distribution.
+
+Validity requires that we never calibrate on data the model was fitted
+on, so a fresh clone of the production classifier is trained on a
+disjoint fit split (~280 components), conformity scores are computed on
+a held-out calibration split (~120), and prediction sets are formed on a
+test split (~100). The calibrated threshold is the ⌈(n+1)(1−α)⌉-th
+smallest calibration score — the finite-sample correction that makes the
+≥ 1 − α bound exact rather than asymptotic. We compare two
+non-conformity scores:
+
+- **LAC** (s = 1 − P̂(y | x); Sadinle et al., 2019) — the smallest sets
+  that still attain *marginal* coverage.
+- **APS** (the cumulative sorted-probability mass up to the true class;
+  Romano et al., 2020) — larger sets that adapt to per-instance
+  difficulty and protect *class-conditional* coverage.
+
+Coverage, mean set size, and singleton rate are reported across
+α ∈ {0.01, 0.05, 0.10, 0.15, 0.20}; the coverage guarantee is derived in
+Appendix A.7.
+
 2.7 Sobol' weight sensitivity
 
 We perform a global variance-based sensitivity analysis on the five
@@ -409,6 +444,50 @@ All classes achieve AUC > 0.91, and the reliability curves track the
 identity line within sampling noise, confirming the XGBoost
 probabilistic outputs are well-calibrated — a prerequisite for the
 RCS engine's Bayesian update step.
+
+3.3.1 Conformal coverage and the marginal-vs-conditional trade-off
+
+Split conformal prediction (see `results/conformal_coverage.png` and
+`results/conformal_metrics.csv`) turns the XGBoost posteriors into
+prediction sets with a guaranteed coverage level. At the headline
+α = 0.10 (90 % target) on the held-out conformal test split:
+
+| Score | Empirical coverage | Mean set size | Singleton rate |
+|-------|-------------------:|--------------:|---------------:|
+| LAC   | 0.92               | 1.05          | 0.95           |
+| APS   | 0.99               | 3.85          | 0.04           |
+
+Two things stand out. First, the LAC score tracks the target almost
+exactly (0.92 vs 0.90) while returning a *single* damage mode for 95 %
+of components — the classifier is confident enough that, at a 90 %
+guarantee, most parts need only one mode inspected. Second, the
+non-randomised APS score is markedly conservative on a five-class
+problem (0.99 coverage, mean set size 3.85), the expected price of its
+discrete, instance-adaptive set construction (Appendix A.7).
+
+The decisive comparison is *class-conditional* coverage at α = 0.10
+(`results/conformal_per_class.csv`):
+
+| Damage mode      | Test n | LAC coverage | APS coverage |
+|------------------|-------:|-------------:|-------------:|
+| No damage        | 64     | 1.00         | 1.00         |
+| Matrix cracking  | 12     | 0.92         | 0.92         |
+| Delamination     | 10     | 0.70         | 1.00         |
+| Fiber breakage   |  7     | 1.00         | 1.00         |
+| Fatigue crack    |  7     | 0.43         | 1.00         |
+
+LAC buys its 0.92 *marginal* coverage by over-covering the easy majority
+"No damage" class while badly *under-covering* the safety-critical
+minority modes — fatigue crack at 0.43 and delamination at 0.70. APS
+spends larger sets to restore ~1.0 coverage on every mode. For an
+airworthiness use case this is the entire argument: a marginal guarantee
+that silently misses fatigue cracks 57 % of the time is unacceptable, so
+APS — or a Mondrian / class-conditional conformal layer, left to future
+work — is the defensible choice despite its larger sets. The minority
+supports here are small (7-12 test components), so the conditional
+figures are themselves noisy; but the direction of the effect is
+unambiguous and is the textbook motivation for adaptive conformal
+scores.
 
 3.4 Feature attribution (SHAP)
 
@@ -704,43 +783,54 @@ pins the core invariants of every pillar.
 
 References
 
-1. Liu, P. F., & Zheng, J. Y. (2006). *Progressive failure analysis
+1. Angelopoulos, A. N., & Bates, S. (2023). *Conformal prediction: A
+   gentle introduction.* Foundations and Trends in Machine Learning,
+   16(4), 494-591.
+
+2. Liu, P. F., & Zheng, J. Y. (2006). *Progressive failure analysis
    of carbon fiber/epoxy composite laminates using continuum damage
    mechanics.* Materials Science and Engineering: A, 485(1-2),
    711-717.
 
-2. Lundberg, S. M., & Lee, S.-I. (2017). *A unified approach to
+3. Lundberg, S. M., & Lee, S.-I. (2017). *A unified approach to
    interpreting model predictions.* Advances in Neural Information
    Processing Systems, 30.
 
-3. Mesogitis, T. S., Skordos, A. A., & Long, A. C. (2014).
+4. Mesogitis, T. S., Skordos, A. A., & Long, A. C. (2014).
    *Uncertainty in the manufacturing of fibrous thermosetting
    composites: A review.* Composites Part A: Applied Science and
    Manufacturing, 57, 67-75.
 
-4. Niu, M. C.-Y. (1992). *Composite Airframe Structures: Practical
+5. Niu, M. C.-Y. (1992). *Composite Airframe Structures: Practical
    Design Information and Data.* Conmilit Press.
 
-5. Potter, K. (2009). *Understanding the origins of defects and
+6. Potter, K. (2009). *Understanding the origins of defects and
    variability in composites manufacture.* Composites Part A: Applied
    Science and Manufacturing, 40 (Suppl).
 
-6. Saltelli, A., Annoni, P., Azzini, I., Campolongo, F., Ratto, M., &
+7. Romano, Y., Sesia, M., & Candès, E. J. (2020). *Classification with
+   valid and adaptive coverage.* Advances in Neural Information
+   Processing Systems, 33, 3581-3591.
+
+8. Sadinle, M., Lei, J., & Wasserman, L. (2019). *Least ambiguous
+   set-valued classifiers with bounded error levels.* Journal of the
+   American Statistical Association, 114(525), 223-234.
+
+9. Saltelli, A., Annoni, P., Azzini, I., Campolongo, F., Ratto, M., &
    Tarantola, S. (2010). *Variance based sensitivity analysis of
    model output. Design and estimator for the total sensitivity
    index.* Computer Physics Communications, 181(2), 259-270.
 
-7. Saxena, A., Goebel, K., Simon, D., & Eklund, N. (2008). *Damage
-   propagation modeling for aircraft engine run-to-failure
-   simulation.* International Conference on Prognostics and Health
-   Management, PHM 2008.
+10. Saxena, A., Goebel, K., Simon, D., & Eklund, N. (2008). *Damage
+    propagation modeling for aircraft engine run-to-failure
+    simulation.* International Conference on Prognostics and Health
+    Management, PHM 2008.
 
-8. Sundar Raaga, R. (2024). *A generalized Φ(Z, H, N) risk matrix
-   for aerospace electrical wiring complexity scoring.* (Source
-   manuscript - generalised in the present work.)
+11. Talreja, R., & Singh, C. V. (2012). *Damage and Failure of
+    Composite Materials.* Cambridge University Press.
 
-9. Talreja, R., & Singh, C. V. (2012). *Damage and Failure of
-   Composite Materials.* Cambridge University Press.
+12. Vovk, V., Gammerman, A., & Shafer, G. (2005). *Algorithmic
+    Learning in a Random World.* Springer.
 
 ---
 
@@ -866,6 +956,34 @@ S Monte-Carlo replicates, and the seed-ensemble size G:
 Every stage is linear in N, so the pipeline scales to large fleets; the
 practical cost is dominated by the tree-ensemble training inside the
 multi-seed loop.
+
+A.7 Conformal coverage guarantee
+
+Let the calibration scores s₁,…,s_n and the test score s_{n+1} be
+exchangeable — they are, because the cloned model is fitted on a
+disjoint split, so the calibration and test points are draws it has
+never seen. Define the threshold as the empirical quantile
+
+> q̂ = s_(⌈(n+1)(1−α)⌉),
+
+the k-th smallest calibration score with k = ⌈(n+1)(1−α)⌉. The test
+label is covered iff s_{n+1} ≤ q̂, i.e. iff the rank of s_{n+1} among the
+n+1 pooled scores is at most k. By exchangeability that rank is uniform
+on {1,…,n+1}, so
+
+> P( s_{n+1} ≤ q̂ ) = k / (n+1) = ⌈(n+1)(1−α)⌉ / (n+1) ≥ 1 − α,
+
+which is the marginal coverage guarantee: finite-sample, and free of any
+assumption on the classifier or the feature distribution. The matching
+upper bound k/(n+1) ≤ 1 − α + 1/(n+1) shows the over-coverage from the
+ceiling is worth at most one calibration point. The much larger
+over-coverage seen for APS in §3.3.1 therefore does *not* come from this
+correction; it comes from the discrete jumps of the set-valued
+construction on a five-class problem. Finally, the guarantee is
+*marginal* — averaged over classes — which is exactly why the
+class-conditional coverage in §3.3.1 can still fail for a minority mode
+and why the adaptive APS score is preferred when conditional coverage
+matters.
 
 ---
 

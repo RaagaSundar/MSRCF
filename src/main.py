@@ -15,6 +15,7 @@ Pipeline stages:
     5. Forecast Remaining Useful Life                    (rul_predictor)
     6. Anomaly detection                                 (anomaly_detector)
     7. Explainability + calibration                      (explainability)
+    7b. Conformal prediction sets                        (conformal)
     8. Sobol sensitivity on Phi weights                  (sensitivity)
     9. Render figures + summary                          (dashboard)
 
@@ -22,6 +23,7 @@ CLI:
 
     python src/main.py [--n-components N] [--seed S] [--tune-best]
                        [--mc-samples M] [--skip-shap] [--skip-sobol]
+                       [--skip-conformal]
 """
 
 from __future__ import annotations
@@ -40,6 +42,7 @@ if HERE not in sys.path:
 
 import anomaly_detector  # noqa: E402
 import config as cfg  # noqa: E402
+import conformal  # noqa: E402
 import damage_predictor as dp  # noqa: E402
 import dashboard  # noqa: E402
 import data_generator  # noqa: E402
@@ -94,6 +97,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--skip-sobol",
         action="store_true",
         help="Skip the Sobol sensitivity analysis stage.",
+    )
+    parser.add_argument(
+        "--skip-conformal",
+        action="store_true",
+        help="Skip the conformal prediction-set stage.",
     )
     return parser.parse_args(argv)
 
@@ -311,6 +319,50 @@ def run_pipeline(args: argparse.Namespace) -> dict:
     print(roc_df.to_string(index=False))
 
     # -----------------------------------------------------------------
+    # 7b) Conformal prediction sets (distribution-free coverage)
+    # -----------------------------------------------------------------
+    _section("[7b/9] Conformal prediction sets")
+    conf_summary_line = ""
+    if not args.skip_conformal:
+        conf = conformal.run_conformal_analysis(
+            df=df,
+            estimator=best.estimator,
+            feature_columns=list(dp.FEATURE_COLUMNS),
+            target_column=dp.TARGET_COLUMN,
+            class_labels=class_labels,
+            class_names=dp.DAMAGE_CLASS_NAMES,
+            alpha=cfg.CONFORMAL_ALPHA,
+            alpha_sweep=cfg.CONFORMAL_ALPHA_SWEEP,
+            calib_fraction=cfg.CONFORMAL_CALIB_FRACTION,
+            test_fraction=cfg.CONFORMAL_TEST_FRACTION,
+            seed=args.seed,
+            output_path=os.path.join(RESULTS_DIR, "conformal_coverage.png"),
+        )
+        conf.metrics_df.to_csv(os.path.join(RESULTS_DIR, "conformal_metrics.csv"), index=False)
+        conf.per_class_df.to_csv(os.path.join(RESULTS_DIR, "conformal_per_class.csv"), index=False)
+        print(f"  coverage figure       : {conf.output_path}")
+        print(
+            f"  target coverage       : {(1 - cfg.CONFORMAL_ALPHA) * 100:.0f}% "
+            f"(alpha={cfg.CONFORMAL_ALPHA})"
+        )
+        head = conf.headline().sort_values("method")
+        for _, r in head.iterrows():
+            print(
+                f"    {r['method']:<4}: empirical coverage={r['empirical_coverage']:.3f}  "
+                f"mean set size={r['mean_set_size']:.2f}  "
+                f"singletons={r['singleton_rate']:.2f}"
+            )
+        aps_row = head[head["method"] == "APS"]
+        if not aps_row.empty:
+            conf_summary_line = (
+                f"  Conformal {(1 - cfg.CONFORMAL_ALPHA) * 100:.0f}% set (APS)      : "
+                f"coverage={float(aps_row['empirical_coverage'].iloc[0]):.2f}, "
+                f"mean size={float(aps_row['mean_set_size'].iloc[0]):.2f} classes\n"
+            )
+    else:
+        print("  (--skip-conformal; skipping)")
+
+    # -----------------------------------------------------------------
     # 8) Sobol sensitivity on Phi weights
     # -----------------------------------------------------------------
     _section("[8/9] Sobol sensitivity on Phi_composite weights")
@@ -384,7 +436,8 @@ def run_pipeline(args: argparse.Namespace) -> dict:
         f"{int(flag_counts.get('GREEN', 0))} / {len(df)}\n"
         f"  RUL: median cycles_to_red     : {red_med:.1f}\n"
         f"  Anomalies flagged             : {n_anom} / {len(df)}\n"
-        f"  MC band mean width            : {mean_width:.2f} RCS pts"
+        f"  MC band mean width            : {mean_width:.2f} RCS pts\n"
+        f"{conf_summary_line}".rstrip()
     )
     print("\nPipeline finished successfully.")
 

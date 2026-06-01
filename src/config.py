@@ -121,6 +121,19 @@ SOBOL_WEIGHT_SCALE = 0.15  # max relative perturbation around nominal
 ISO_CONTAMINATION = 0.05
 
 
+# ---------------------------------------------------------------------------
+# Conformal prediction (distribution-free uncertainty sets)
+# ---------------------------------------------------------------------------
+# Headline target miscoverage: alpha=0.10 -> 90 % coverage guarantee.
+CONFORMAL_ALPHA = 0.10
+# Sweep of miscoverage rates used to draw the coverage-calibration curve.
+CONFORMAL_ALPHA_SWEEP: tuple[float, ...] = (0.01, 0.05, 0.10, 0.15, 0.20)
+# Disjoint fit / calibration / test split fractions. With 500 components
+# this yields ~280 fit, ~120 calibration, ~100 test points.
+CONFORMAL_CALIB_FRACTION = 0.30
+CONFORMAL_TEST_FRACTION = 0.20
+
+
 @dataclass
 class RunConfig:
     """Per-run options that may be overridden by argparse."""
