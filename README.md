@@ -1,5 +1,7 @@
 # MSRCF
-
+<p align="center">
+  <img src="assets/showcase_hero.png" alt="MSRCF — Manufacture-to-Service Risk Continuity Framework" width="100%">
+</p>
 [![CI](https://github.com/RaagaSundar/MSRCF/actions/workflows/ci.yml/badge.svg)](https://github.com/RaagaSundar/MSRCF/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/)
 [![Code style: ruff](https://img.shields.io/badge/lint-ruff-orange.svg)](https://github.com/astral-sh/ruff)
